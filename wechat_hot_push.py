@@ -32,6 +32,7 @@ TOPHUB_WECHAT_NODE = "/n/WnBe01o371"  # 微信24h热文榜节点ID
 # 输出配置 - 自动适配本地运行和GitHub Actions环境
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "output"))
 HTML_OUTPUT = os.path.join(OUTPUT_DIR, "latest.html")
+JSON_OUTPUT = os.path.join(OUTPUT_DIR, "latest.json")
 
 # ============ 数据抓取 ============
 

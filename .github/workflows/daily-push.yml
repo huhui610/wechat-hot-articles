@@ -24,22 +24,19 @@ jobs:
           cache: 'pip'
       
       - name: 安装依赖
-        run: |
-          pip install --upgrade pip
-          pip install requests beautifulsoup4 lxml
+        run: pip install -r requirements.txt
       
       - name: 执行抓取和推送
         env:
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
-        run: |
-          python3 wechat_hot_push.py
+        run: python3 wechat_hot_push.py
       
       - name: 保存HTML报告
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: daily-report-${{ github.run_number }}
-          path: latest.html
+          path: output/latest.html
           retention-days: 30
       
       - name: 保存JSON数据
@@ -47,5 +44,5 @@ jobs:
         if: always()
         with:
           name: daily-data-${{ github.run_number }}
-          path: latest.json
+          path: output/latest.json
           retention-days: 30
