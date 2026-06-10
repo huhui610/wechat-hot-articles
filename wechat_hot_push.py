@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-微信公众号100万+爆文每日推送服务
+微信公众号10万+爆文每日推送服务
 ====================================
-每天早上8点抓取前一日阅读量100万+的微信公众号文章,
+每天早上8点抓取前一日阅读量10万+的微信公众号文章,
 筛选5篇最优文章,通过Server酱推送到微信。
 
 数据来源: 今日热榜(tophub) 微信24h热文榜
@@ -81,7 +81,7 @@ def fetch_wechat_hot_articles() -> List[Dict]:
                         
                         title = title.strip()
                         
-                        if title and views_num >= 1000000:  # 100万+
+                        if title and views_num >= 100000:  # 10万+
                             articles.append({
                                 'title': title,
                                 'url': href,
@@ -120,7 +120,7 @@ def fetch_wechat_hot_articles() -> List[Dict]:
                         
                         title = title.strip()
                         
-                        if title and views_num >= 1000000:
+                        if title and views_num >= 100000:
                             # 检查是否已存在(避免重复)
                             existing_urls = [a['url'] for a in articles]
                             if href not in existing_urls:
@@ -215,10 +215,10 @@ def format_serverchan_message(articles: List[Dict]) -> tuple:
     fetch_time = datetime.now().strftime('%H:%M')
     
     # 消息标题
-    title = f"🔥 微信100万+爆文日报 | {yesterday}"
+    title = f"🔥 微信10万+爆文日报 | {yesterday}"
     
     # Markdown内容
-    desp = f"""## 微信公众号100万+爆文日报
+    desp = f"""## 微信公众号10万+爆文日报
 
 > 📅 数据日期: {yesterday}  
 > 🕐 推送时间: {today} {fetch_time}  
@@ -231,7 +231,7 @@ def format_serverchan_message(articles: List[Dict]) -> tuple:
     for i, article in enumerate(articles, 1):
         desp += f"""### {i}. {article['title']}
 
-- 📖 阅读量: **{article['views']}** (100万+爆文)
+- 📖 阅读量: **{article['views']}** (10万+爆文)
 - 🔗 [点击阅读原文]({article['url']})
 - 📂 分类: {categorize_article(article['title'])}
 
@@ -242,7 +242,7 @@ def format_serverchan_message(articles: List[Dict]) -> tuple:
     desp += f"""## 📈 统计
 
 - 本次筛选文章数: **{len(articles)}** 篇
-- 所有文章阅读量均超 **100万+**
+- 所有文章阅读量均超 **10万+**
 - 按阅读量排序精选推送
 
 ---
@@ -267,7 +267,7 @@ def format_html_report(articles: List[Dict]) -> str:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>微信100万+爆文日报 | {yesterday}</title>
+<title>微信10万+爆文日报 | {yesterday}</title>
 <style>
     * {{ margin: 0; padding: 0; box-sizing: border-box; }}
     body {{ 
@@ -360,7 +360,7 @@ def format_html_report(articles: List[Dict]) -> str:
 <body>
 
 <div class="header">
-    <h1>🔥 微信公众号100万+爆文日报</h1>
+    <h1>🔥 微信公众号10万+爆文日报</h1>
     <div class="meta">
         📅 数据日期: {yesterday} | 🕐 推送时间: {today} {fetch_time} | 📊 来源: 今日热榜
     </div>
@@ -383,7 +383,7 @@ def format_html_report(articles: List[Dict]) -> str:
     
     html += f"""
 <div class="stats">
-    📈 本次筛选 <strong>{len(articles)}</strong> 篇 | 所有文章阅读量均超 <strong>100万+</strong> | 按阅读量排序精选推送
+    📈 本次筛选 <strong>{len(articles)}</strong> 篇 | 所有文章阅读量均超 <strong>10万+</strong> | 按阅读量排序精选推送
 </div>
 
 <div class="footer">
@@ -468,16 +468,16 @@ def push_to_serverchan_v3(title: str, desp: str, uid: str, sendkey: str) -> bool
 def main():
     """主执行流程"""
     print("=" * 50)
-    print(f"微信100万+爆文日报 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"微信10万+爆文日报 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 50)
     
     # 1. 抓取数据
     print("\n[1/4] 抓取微信热文数据...")
     articles = fetch_wechat_hot_articles()
-    print(f"  抓取到 {len(articles)} 篇100万+文章")
+    print(f"  抓取到 {len(articles)} 篇10万+文章")
     
     if not articles:
-        print("[WARN] 未抓取到任何100万+文章,可能是数据源暂时不可用")
+        print("[WARN] 未抓取到任何10万+文章,可能是数据源暂时不可用")
         print("[INFO] 尝试保存空报告...")
         articles = [{
             'title': '暂无数据 - 请稍后重试',
@@ -526,7 +526,7 @@ def main():
     # 5. 汇总
     print("\n" + "=" * 50)
     print(f"✅ 执行完成!")
-    print(f"  抓取100万+文章: {len(articles)} 篇")
+    print(f"  抓取10万+文章: {len(articles)} 篇")
     print(f"  精选推送: {len(top5)} 篇")
     print(f"  Server酱推送: {'✅ 成功' if push_success else '❌ 未配置/失败'}")
     print(f"  本地报告: {HTML_OUTPUT}")
