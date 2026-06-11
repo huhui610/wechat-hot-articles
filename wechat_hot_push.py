@@ -82,40 +82,61 @@ HEADERS = {
 # ============ 数据源1: 猫笔刀备份站 ============
 
 def fetch_maobidao_articles() -> List[Dict]:
-    """从猫笔刀备份站RSS抓取最新文章"""
+    """从猫笔刀备份站抓取最新文章(通过RSS代理)"""
     articles = []
+    
+    # 策略1: 通过rss2json代理(GitHub Actions可访问)
+    try:
+        resp = requests.get(
+            'https://api.rss2json.com/v1/api.json?rss_url=https://maobidao.cn/feed/',
+            headers={'User-Agent': 'Mozilla/5.0'},
+            timeout=20
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            items = data.get('items', [])
+            for item in items:
+                title = item.get('title', '')
+                url = item.get('link', '')
+                if title and url:
+                    articles.append({
+                        'title': title,
+                        'url': url,
+                        'views': '10万+',
+                        'views_num': 100000,
+                        'account': '猫笔刀',
+                        'source': 'maobidao_rss',
+                        'fetch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    })
+            print(f"  猫笔刀RSS(代理): {len(articles)} 篇")
+            return articles
+    except Exception as e:
+        print(f"  [WARN] RSS代理失败: {e}")
+    
+    # 策略2: 直接访问RSS(GitHub可能不行,本地可以)
     try:
         import xml.etree.ElementTree as ET
-        
         resp = requests.get('https://maobidao.cn/feed/', headers={
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0'
         }, timeout=15)
-        
         if resp.status_code == 200:
             root = ET.fromstring(resp.text)
-            items = root.findall('.//item')
-            
-            for item in items:
+            for item in root.findall('.//item'):
                 title_el = item.find('title')
                 link_el = item.find('link')
                 if title_el is not None and link_el is not None:
-                    title = title_el.text or ''
-                    url = link_el.text or ''
-                    
-                    if title and url:
-                        articles.append({
-                            'title': title,
-                            'url': url,
-                            'views': '10万+',
-                            'views_num': 100000,
-                            'account': '猫笔刀',
-                            'source': 'maobidao_rss',
-                            'fetch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        })
-            
-            print(f"  猫笔刀RSS: {len(articles)} 篇")
+                    articles.append({
+                        'title': title_el.text or '',
+                        'url': link_el.text or '',
+                        'views': '10万+',
+                        'views_num': 100000,
+                        'account': '猫笔刀',
+                        'source': 'maobidao_rss',
+                        'fetch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    })
+            print(f"  猫笔刀RSS(直连): {len(articles)} 篇")
     except Exception as e:
-        print(f"  [ERROR] 猫笔刀RSS抓取失败: {e}")
+        print(f"  [ERROR] 猫笔刀RSS直连失败: {e}")
     
     return articles
 
