@@ -1,47 +1,47 @@
-name: 微信大V爆文日报推送
+name: 微信财经大V爆文日报推送
 
 on:
   # 主定时: 北京时间8:03 = UTC 0:03
-  # 避开整点和半点,减少GitHub调度延迟
   schedule:
     - cron: '3 0 * * *'    # 北京时间 8:03
-    - cron: '17 0 * * *'   # 北京时间 8:17 (备用,主时间失败时兜底)
+    - cron: '17 0 * * *'   # 北京时间 8:17 (备用兜底)
   
   # 允许手动触发
   workflow_dispatch:
 
 jobs:
-  # 去重: 同一天只运行一次
+  # 定时任务去重: 同一天cron只运行一次(手动触发不受限制)
   check-date:
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
     steps:
-      - name: 检查今天是否已运行
+      - name: 判断是否需要运行
         id: check
         run: |
-          # 获取北京时间今天的日期
+          # 手动触发时总是运行
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "手动触发,强制运行"
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # cron触发时,检查今天是否已运行
           TODAY=$(TZ=Asia/Shanghai date +%Y-%m-%d)
-          # 用GitHub Cache标记今天是否已运行
-          echo "today=$TODAY" >> $GITHUB_OUTPUT
+          CACHE_KEY="daily-push-${TODAY}"
           
-      - name: 检查缓存
-        id: cache
-        uses: actions/cache@v4
-        with:
-          path: /tmp/daily-push-marker
-          key: daily-push-${{ steps.check.outputs.today }}
+          # 尝试创建缓存,如果已存在说明今天已运行
+          CACHE_HIT=$(gh cache list -R ${{ github.repository }} -L 100 | grep -c "$CACHE_KEY" || true)
           
-      - name: 判断是否需要运行
-        id: final
-        run: |
-          if [ -f /tmp/daily-push-marker ]; then
-            echo "今天已运行过,跳过"
+          if [ "$CACHE_HIT" -gt 0 ]; then
+            echo "今天cron已运行过,跳过"
             echo "should_run=false" >> $GITHUB_OUTPUT
           else
-            echo "今天未运行,继续执行"
+            echo "今天cron未运行,继续执行"
             echo "should_run=true" >> $GITHUB_OUTPUT
           fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   push-daily:
     needs: check-date
@@ -66,8 +66,12 @@ jobs:
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
         run: python3 wechat_hot_push.py
       
-      - name: 标记今天已运行
-        run: echo "done" > /tmp/daily-push-marker
+      - name: 标记今天已运行(cron去重)
+        if: github.event_name == 'schedule'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/daily-push-marker
+          key: daily-push-$(TZ=Asia/Shanghai date +%Y-%m-%d)
       
       - name: 保存HTML报告
         uses: actions/upload-artifact@v4
