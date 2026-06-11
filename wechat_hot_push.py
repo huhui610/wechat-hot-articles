@@ -82,36 +82,40 @@ HEADERS = {
 # ============ 数据源1: 猫笔刀备份站 ============
 
 def fetch_maobidao_articles() -> List[Dict]:
-    """从猫笔刀备份站抓取最新文章"""
+    """从猫笔刀备份站RSS抓取最新文章"""
     articles = []
     try:
-        resp = requests.get('https://maobidao.cn/', headers={
+        import xml.etree.ElementTree as ET
+        
+        resp = requests.get('https://maobidao.cn/feed/', headers={
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }, timeout=15)
+        
         if resp.status_code == 200:
-            soup = BeautifulSoup(resp.text, 'html.parser')
+            root = ET.fromstring(resp.text)
+            items = root.findall('.//item')
             
-            # WordPress文章列表
-            post_links = soup.select('.entry-title a, .post-title a, article h2 a, h3 a')
+            for item in items:
+                title_el = item.find('title')
+                link_el = item.find('link')
+                if title_el is not None and link_el is not None:
+                    title = title_el.text or ''
+                    url = link_el.text or ''
+                    
+                    if title and url:
+                        articles.append({
+                            'title': title,
+                            'url': url,
+                            'views': '10万+',
+                            'views_num': 100000,
+                            'account': '猫笔刀',
+                            'source': 'maobidao_rss',
+                            'fetch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        })
             
-            for link in post_links:
-                title = link.get_text(strip=True)
-                href = link.get('href', '')
-                
-                if title and len(title) > 5 and 'maobidao.cn' in href:
-                    articles.append({
-                        'title': title,
-                        'url': href,
-                        'views': '10万+',
-                        'views_num': 100000,
-                        'account': '猫笔刀',
-                        'source': 'maobidao_backup',
-                        'fetch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    })
-            
-            print(f"  猫笔刀备份站: {len(articles)} 篇")
+            print(f"  猫笔刀RSS: {len(articles)} 篇")
     except Exception as e:
-        print(f"  [ERROR] 猫笔刀备份站抓取失败: {e}")
+        print(f"  [ERROR] 猫笔刀RSS抓取失败: {e}")
     
     return articles
 
@@ -252,7 +256,7 @@ def filter_finance_articles(articles: List[Dict]) -> List[Dict]:
         account = article.get('account', '')
         
         # 猫笔刀等备份站来源,直接算财经大V
-        if article.get('source') in ('maobidao_backup',):
+        if article.get('source') in ('maobidao_rss', 'maobidao_backup',):
             finance_articles.append(article)
             continue
         
