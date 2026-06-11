@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """
-微信公众号财经大V爆文日报推送服务
+微信财经大V爆文日报推送服务
 ====================================
-每天早上8点抓取前一日阅读量10万+的微信公众号文章,
-识别账号来源,只推送财经大V账号的文章,过滤普通账号。
+每天早上8点抓取前一日阅读量10万+的财经大V公众号文章,
+推送10篇到微信。
 
-数据来源: 今日热榜(tophub) 微信24h热文榜
+数据来源:
+1. 今日热榜(tophub) 微信24h热文榜 (聚合热文)
+2. 大V备份站/RSS (主动抓取猫笔刀等)
+
 推送方式: Server酱 Turbo版 (微信推送)
 """
 
@@ -17,57 +20,57 @@ import time
 import os
 import sys
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+from typing import List, Dict
 
 # ============ 配置区 ============
 
-# Server酱配置
 SERVERCHAN_SENDKEY = os.environ.get("SERVERCHAN_SENDKEY", "")
 
-# 数据源配置
 TOPHUB_BASE_URL = "https://tophub.app"
 TOPHUB_WECHAT_NODE = "/n/WnBe01o371"
 
-# 输出配置
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "output"))
 HTML_OUTPUT = os.path.join(OUTPUT_DIR, "latest.html")
 JSON_OUTPUT = os.path.join(OUTPUT_DIR, "latest.json")
 
-# ★★★ 财经财经大V白名单 ★★★
-# 只推送这些财经账号的文章,其他全部过滤
-# 你可以随时添加/删除账号名
-BIG_V_WHITELIST = [
+# ★★★ 财经大V配置 ★★★
+# 每个大V配置: 账号名 + 文章获取方式
+FINANCE_BIG_VS = {
     # === 个人财经大V ===
-    "猫笔刀", "金渐成", "招财大牛猫",      # 股市投资
-    "半佛仙人",                              # 商业深度分析
-    "饭统戴老板",                            # 商业故事
-    "刘润",                                  # 商业咨询
-    "吴晓波频道",                            # 财经作家
-    "秦朔朋友圈",                            # 商业评论
-    "正和岛",                                # 企业家社群
-    "格隆汇",                                # 港股美股
-    "雪球",                                  # 投资社区
-    "大猫财经",                              # 财经解读
-    "小白读财经",                            # 财经科普
-    "财经要参",                              # 财经资讯
-    "金融八卦女",                            # 金融圈
-    "市值观察",                              # 上市公司
+    "猫笔刀": {"source": "backup", "url": "https://maobidao.cn/"},
+    "金渐成": {"source": "tophub", "keywords": ["金渐成"]},
+    "半佛仙人": {"source": "tophub", "keywords": ["半佛仙人"]},
+    "饭统戴老板": {"source": "tophub", "keywords": ["饭统戴老板"]},
+    "刘润": {"source": "tophub", "keywords": ["刘润"]},
+    "吴晓波频道": {"source": "tophub", "keywords": ["吴晓波"]},
     # === 财经媒体 ===
-    "远川研究",                              # 行业研究
-    "36氪", "虎嗅",                          # 商业科技媒体
-    "晚点LatePost",                          # 商业深度
-    "财新网", "第一财经",                    # 专业财经媒体
-    "经济观察报",                            # 财经日报
-    "中国基金报",                            # 基金投资
-    "券商中国",                              # 券商资讯
-    "中国证券报",                            # 证券市场
-    "上海证券报",                            # 证券市场
-    # === 科技商业(与财经交叉) ===
-    "极客公园",                              # 科技商业
-    "量子位",                                # AI投资
-]
+    "远川研究": {"source": "tophub", "keywords": ["远川"]},
+    "36氪": {"source": "tophub", "keywords": ["36氪"]},
+    "虎嗅": {"source": "tophub", "keywords": ["虎嗅"]},
+    "晚点LatePost": {"source": "tophub", "keywords": ["晚点"]},
+    "财新网": {"source": "tophub", "keywords": ["财新"]},
+    "第一财经": {"source": "tophub", "keywords": ["第一财经"]},
+    "经济观察报": {"source": "tophub", "keywords": ["经济观察"]},
+    "中国基金报": {"source": "tophub", "keywords": ["中国基金报"]},
+    "券商中国": {"source": "tophub", "keywords": ["券商中国"]},
+    "正和岛": {"source": "tophub", "keywords": ["正和岛"]},
+    "格隆汇": {"source": "tophub", "keywords": ["格隆汇"]},
+    "大猫财经": {"source": "tophub", "keywords": ["大猫财经"]},
+    "市值观察": {"source": "tophub", "keywords": ["市值观察"]},
+    "国是直通车": {"source": "tophub", "keywords": ["国是直通车"]},
+    # === 科技商业 ===
+    "极客公园": {"source": "tophub", "keywords": ["极客公园"]},
+    "量子位": {"source": "tophub", "keywords": ["量子位"]},
+}
 
-# ============ 数据抓取 ============
+# 所有白名单关键词(用于tophub文章账号匹配)
+ALL_WHITELIST_KEYWORDS = []
+for name, cfg in FINANCE_BIG_VS.items():
+    kws = cfg.get("keywords", [name])
+    ALL_WHITELIST_KEYWORDS.extend(kws)
+ALL_WHITELIST_KEYWORDS = list(set(ALL_WHITELIST_KEYWORDS))
+
+# ============ 通用 ============
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -76,51 +79,52 @@ HEADERS = {
     'Referer': 'https://tophub.app/',
 }
 
-WX_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-}
+# ============ 数据源1: 猫笔刀备份站 ============
 
-
-def extract_account_name(url: str) -> str:
-    """
-    访问微信文章页面提取公众号账号名
-    """
+def fetch_maobidao_articles() -> List[Dict]:
+    """从猫笔刀备份站抓取最新文章"""
+    articles = []
     try:
-        resp = requests.get(url, headers=WX_HEADERS, timeout=10)
+        resp = requests.get('https://maobidao.cn/', headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }, timeout=15)
         if resp.status_code == 200:
             soup = BeautifulSoup(resp.text, 'html.parser')
             
-            # 方式1: span#profileBt (最可靠)
-            elem = soup.find('span', id='profileBt')
-            if elem:
-                name = elem.get_text(strip=True)
-                if name:
-                    return name
+            # WordPress文章列表
+            post_links = soup.select('.entry-title a, .post-title a, article h2 a, h3 a')
             
-            # 方式2: var nickname
-            m = re.search(r'var\s+nickname\s*=\s*["\']([^"\']+)', resp.text)
-            if m:
-                return m.group(1)
+            for link in post_links:
+                title = link.get_text(strip=True)
+                href = link.get('href', '')
+                
+                if title and len(title) > 5 and 'maobidao.cn' in href:
+                    articles.append({
+                        'title': title,
+                        'url': href,
+                        'views': '10万+',
+                        'views_num': 100000,
+                        'account': '猫笔刀',
+                        'source': 'maobidao_backup',
+                        'fetch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    })
             
-            # 方式3: rich_media_meta_nickname
-            m = re.search(r'rich_media_meta_nickname\s*=\s*["\']([^"\']+)', resp.text)
-            if m:
-                return m.group(1)
-    except Exception:
-        pass
+            print(f"  猫笔刀备份站: {len(articles)} 篇")
+    except Exception as e:
+        print(f"  [ERROR] 猫笔刀备份站抓取失败: {e}")
     
-    return ""
+    return articles
 
 
-def fetch_wechat_hot_articles() -> List[Dict]:
-    """从今日热榜抓取微信24h热文榜数据"""
+# ============ 数据源2: tophub热文 ============
+
+def fetch_tophub_articles() -> List[Dict]:
+    """从tophub抓取微信热文"""
     articles = []
     
-    # 策略1: 从tophub首页直接抓取
+    # 策略1: 首页
     try:
-        url = TOPHUB_BASE_URL
-        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp = requests.get(TOPHUB_BASE_URL, headers=HEADERS, timeout=15)
         if resp.status_code == 200:
             soup = BeautifulSoup(resp.text, 'html.parser')
             links = soup.find_all('a')
@@ -136,13 +140,7 @@ def fetch_wechat_hot_articles() -> List[Dict]:
                         views_num = float(views_str) * 10000
                         
                         title_match = re.match(r'^\d+(.+?)(\d+\.?\d*万)$', text)
-                        if title_match:
-                            title = title_match.group(1)
-                        else:
-                            title = text.replace(views_match.group(0), '')
-                            title = re.sub(r'^\d+', '', title)
-                        
-                        title = title.strip()
+                        title = title_match.group(1).strip() if title_match else text
                         
                         if title and views_num >= 100000:
                             articles.append({
@@ -150,17 +148,16 @@ def fetch_wechat_hot_articles() -> List[Dict]:
                                 'url': href,
                                 'views': f'{views_str}万',
                                 'views_num': views_num,
+                                'account': '',
                                 'source': 'tophub',
-                                'account': '',  # 后面填充
                                 'fetch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                             })
     except Exception as e:
-        print(f"[ERROR] tophub首页抓取失败: {e}")
+        print(f"  [ERROR] tophub首页抓取失败: {e}")
     
-    # 策略2: 从微信24h热文榜专门页面抓取
+    # 策略2: 微信24h热文榜
     try:
-        url = TOPHUB_BASE_URL + TOPHUB_WECHAT_NODE
-        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp = requests.get(TOPHUB_BASE_URL + TOPHUB_WECHAT_NODE, headers=HEADERS, timeout=15)
         if resp.status_code == 200:
             soup = BeautifulSoup(resp.text, 'html.parser')
             links = soup.find_all('a')
@@ -176,13 +173,7 @@ def fetch_wechat_hot_articles() -> List[Dict]:
                         views_num = float(views_str) * 10000
                         
                         title_match = re.match(r'^\d+(.+?)(\d+\.?\d*万)$', text)
-                        if title_match:
-                            title = title_match.group(1)
-                        else:
-                            title = text.replace(views_match.group(0), '')
-                            title = re.sub(r'^\d+', '', title)
-                        
-                        title = title.strip()
+                        title = title_match.group(1).strip() if title_match else text
                         
                         if title and views_num >= 100000:
                             existing_urls = [a['url'] for a in articles]
@@ -192,264 +183,205 @@ def fetch_wechat_hot_articles() -> List[Dict]:
                                     'url': href,
                                     'views': f'{views_str}万',
                                     'views_num': views_num,
-                                    'source': 'tophub_wechat',
                                     'account': '',
+                                    'source': 'tophub_wechat',
                                     'fetch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                 })
     except Exception as e:
-        print(f"[ERROR] tophub微信热文榜抓取失败: {e}")
+        print(f"  [ERROR] tophub微信热文榜抓取失败: {e}")
     
-    # 排序+去重
+    # 去重
     articles.sort(key=lambda x: x['views_num'], reverse=True)
-    unique_articles = []
-    seen_titles = set()
+    unique = []
+    seen = set()
     for a in articles:
-        simplified = re.sub(r'[，。！？、\s]', '', a['title'])[:20]
-        if simplified not in seen_titles:
-            seen_titles.add(simplified)
-            unique_articles.append(a)
+        key = re.sub(r'[，。！？、\s]', '', a['title'])[:20]
+        if key not in seen:
+            seen.add(key)
+            unique.append(a)
     
-    return unique_articles
+    print(f"  tophub热文: {len(unique)} 篇")
+    return unique
+
+
+# ============ 账号识别 ============
+
+def extract_account_name(url: str) -> str:
+    """访问微信文章页面提取账号名"""
+    try:
+        resp = requests.get(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }, timeout=10)
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            elem = soup.find('span', id='profileBt')
+            if elem:
+                return elem.get_text(strip=True)
+            m = re.search(r'var\s+nickname\s*=\s*["\']([^"\']+)', resp.text)
+            if m:
+                return m.group(1)
+    except Exception:
+        pass
+    return ""
 
 
 def identify_accounts(articles: List[Dict]) -> List[Dict]:
-    """
-    识别每篇文章的账号来源
-    尝试访问文章页面提取账号名
-    """
-    print(f"  识别账号来源 (共{len(articles)}篇)...")
+    """识别tophub文章的账号来源(猫笔刀等备份站文章已有账号名)"""
+    need_identify = [a for a in articles if not a.get('account')]
+    print(f"  需要识别账号: {len(need_identify)} 篇")
     
-    for i, article in enumerate(articles):
+    for i, article in enumerate(need_identify):
         account = extract_account_name(article['url'])
         article['account'] = account
+        is_v = any(kw in account for kw in ALL_WHITELIST_KEYWORDS) if account else False
         if account:
-            print(f"    [{i+1}] {article['title'][:30]} ← {account}")
-        else:
-            print(f"    [{i+1}] {article['title'][:30]} ← 未知账号")
-        time.sleep(0.3)  # 避免请求过快
+            print(f"    [{i+1}] {account} {'✅财经大V' if is_v else ''} | {article['title'][:30]}")
+        time.sleep(0.3)
     
     return articles
 
 
-def filter_big_v_articles(articles: List[Dict], whitelist: List[str]) -> List[Dict]:
-    """
-    只保留财经大V账号的文章
-    whitelist中的账号名会做模糊匹配(包含即可)
-    """
-    big_v_articles = []
+# ============ 财经大V过滤 ============
+
+def filter_finance_articles(articles: List[Dict]) -> List[Dict]:
+    """只保留财经大V的文章,不够10篇时从其他文章补充"""
+    finance_articles = []
     other_articles = []
     
     for article in articles:
         account = article.get('account', '')
         
+        # 猫笔刀等备份站来源,直接算财经大V
+        if article.get('source') in ('maobidao_backup',):
+            finance_articles.append(article)
+            continue
+        
         if not account:
-            # 未知账号,放入"其他"列表(不会被优先选择)
             other_articles.append(article)
             continue
         
-        # 模糊匹配白名单
-        is_big_v = False
-        for v_name in whitelist:
-            if v_name in account or account in v_name:
-                is_big_v = True
-                break
+        # 白名单关键词匹配
+        is_finance = any(kw in account for kw in ALL_WHITELIST_KEYWORDS)
         
-        if is_big_v:
-            big_v_articles.append(article)
+        if is_finance:
+            finance_articles.append(article)
         else:
             other_articles.append(article)
     
-    print(f"  财经大V账号文章: {len(big_v_articles)} 篇")
-    print(f"  其他账号文章: {len(other_articles)} 篇 (已过滤)")
+    print(f"  财经大V文章: {len(finance_articles)} 篇")
+    print(f"  其他文章: {len(other_articles)} 篇 (已过滤)")
     
-    # 如果大V文章不够5篇,从其他文章中补充
-    if len(big_v_articles) < 5 and other_articles:
-        supplement = other_articles[:5 - len(big_v_articles)]
-        print(f"  大V不够5篇,从其他账号补充 {len(supplement)} 篇")
-        big_v_articles.extend(supplement)
+    # 如果财经大V不够10篇,从其他补充
+    if len(finance_articles) < 10 and other_articles:
+        supplement = other_articles[:10 - len(finance_articles)]
+        print(f"  财经大V不够10篇,从其他补充 {len(supplement)} 篇")
+        finance_articles.extend(supplement)
     
-    return big_v_articles
+    return finance_articles
 
 
-def select_top_articles(articles: List[Dict], count: int = 5) -> List[Dict]:
+def select_top_articles(articles: List[Dict], count: int = 10) -> List[Dict]:
     """选择最优的count篇文章"""
     if len(articles) <= count:
         return articles
     
-    # 大V文章优先,按阅读量排序
-    selected = []
-    categories_seen = set()
+    # 优先: 有明确账号名的财经大V文章 > 未知账号文章
+    named = [a for a in articles if a.get('account')]
+    unnamed = [a for a in articles if not a.get('account')]
     
-    for article in articles:
-        category = categorize_article(article['title'])
-        if category not in categories_seen or len([s for s in selected if categorize_article(s['title']) == category]) < 2:
-            selected.append(article)
-            categories_seen.add(category)
-        if len(selected) >= count:
-            break
-    
+    selected = named[:count]
     if len(selected) < count:
-        remaining = [a for a in articles if a not in selected]
-        selected.extend(remaining[:count - len(selected)])
+        selected.extend(unnamed[:count - len(selected)])
     
     return selected[:count]
-
-
-def categorize_article(title: str) -> str:
-    """简单分类文章"""
-    category_keywords = {
-        '社会': ['通报', '事故', '灾害', '暴雨', '预警', '塌陷', '救援', '表扬', '处罚'],
-        '科技': ['AI', '苹果', 'WWDC', '手机', '芯片', '科技', '算法', 'GPT', '大模型', 'ima'],
-        '健康': ['肥胖', '饮食', '健康', '医生', '疾病', '昏迷', '提醒', '中毒', '异味'],
-        '娱乐': ['明星', '演唱', '综艺', '电影', '谢娜', '林志颖'],
-        '生活': ['高考', '暑假', '旅行', '美食', '饮料', '省钱', '维权', '套餐', '运营商'],
-        '财经': ['股价', '投资', '股票', '涨停', '比亚迪', '财经', '上市'],
-    }
-    
-    for cat, keywords in category_keywords.items():
-        for kw in keywords:
-            if kw in title:
-                return cat
-    
-    return '综合'
 
 
 # ============ 消息格式化 ============
 
 def format_serverchan_message(articles: List[Dict]) -> tuple:
-    """格式化Server酱推送消息"""
     yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y年%m月%d日')
     today = datetime.now().strftime('%Y年%m月%d日')
     fetch_time = datetime.now().strftime('%H:%M')
     
-    title = f"🔥 财经大V爆文日报 | {yesterday}"
+    title = f"💰 财经大V爆文日报 | {yesterday}"
     
-    desp = f"""## 微信财经大V爆文日报
+    desp = f"""## 💰 财经大V爆文日报
 
-> 📅 数据日期: {yesterday}  
-> 🕐 推送时间: {today} {fetch_time}  
-> 📊 数据来源: 今日热榜 微信24h热文榜  
-> 🎯 只推送财经大V账号文章
+> 📅 {yesterday} | 🕐 {today} {fetch_time}  
+> 🎯 只推送财经大V | 📊 10万+精选
 
 ---
 
 """
-
     for i, article in enumerate(articles, 1):
         account = article.get('account', '未知账号')
-        is_big_v = any(v in account or account in v for v in BIG_V_WHITELIST) if account else False
-        v_tag = "💰财经" if is_big_v else ""
+        is_v = any(kw in account for kw in ALL_WHITELIST_KEYWORDS) if account else False
+        tag = "💰财经" if is_v else ""
         
         desp += f"""### {i}. {article['title']}
-
-- 📖 阅读量: **{article['views']}** (10万+爆文)
-- 📝 来源账号: **{account}** {v_tag}
-- 🔗 [点击阅读原文]({article['url']})
-- 📂 分类: {categorize_article(article['title'])}
+- 📝 **{account}** {tag}
+- 📖 阅读量: **{article['views']}**
+- 🔗 [阅读原文]({article['url']})
 
 ---
 
-"""
-
-    desp += f"""## 📈 统计
-
-- 本次筛选文章数: **{len(articles)}** 篇
-- 所有文章阅读量均超 **10万+**
-- 优先推送 **财经大V账号** 文章
-
----
-
-*数据来源: [今日热榜](https://tophub.app/n/WnBe01o371) | 微信24h热文榜*
-*服务由自动脚本生成,每天早上8:00准时推送*
 """
     
+    desp += f"""*数据来源: 今日热榜 + 猫笔刀备份站 | 每天早上8:00推送*"""
     return title, desp
 
 
 def format_html_report(articles: List[Dict]) -> str:
-    """生成HTML格式报告"""
     yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y年%m月%d日')
     today = datetime.now().strftime('%Y年%m月%d日')
     fetch_time = datetime.now().strftime('%H:%M')
     
     html = f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
+<html lang="zh-CN"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>财经大V爆文日报 | {yesterday}</title>
 <style>
-    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }}
-    .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 12px; margin-bottom: 20px; }}
-    .header h1 {{ font-size: 24px; margin-bottom: 10px; }}
-    .header .meta {{ font-size: 14px; opacity: 0.9; }}
-    .article-card {{ background: white; padding: 20px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-    .article-card:hover {{ transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }}
-    .rank {{ display: inline-block; background: #667eea; color: white; width: 30px; height: 30px; border-radius: 50%; text-align: center; line-height: 30px; font-weight: bold; font-size: 14px; margin-right: 10px; }}
-    .title {{ font-size: 18px; font-weight: 600; color: #333; margin-bottom: 8px; }}
-    .meta {{ font-size: 14px; color: #666; margin-bottom: 10px; }}
-    .views {{ color: #e74c3c; font-weight: bold; }}
-    .account {{ color: #2196F3; font-weight: bold; }}
-    .big-v {{ background: #FF9800; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; }}
-    .category {{ background: #f0f0f0; padding: 2px 8px; border-radius: 4px; font-size: 12px; color: #666; }}
-    .link {{ display: inline-block; background: #667eea; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-size: 14px; }}
-    .link:hover {{ background: #5a6fd6; }}
-    .footer {{ text-align: center; padding: 20px; color: #999; font-size: 12px; }}
-    .stats {{ background: white; padding: 20px; border-radius: 8px; margin-bottom: 15px; text-align: center; }}
-</style>
-</head>
-<body>
-<div class="header">
-    <h1>🔥 微信财经大V爆文日报</h1>
-    <div class="meta">
-        📅 {yesterday} | 🕐 {today} {fetch_time} | 🎯 只推送财经大V账号 | 📊 今日热榜
-    </div>
-</div>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;color:#333;line-height:1.6;max-width:800px;margin:0 auto;padding:20px}}
+.header{{background:linear-gradient(135deg,#2196F3 0%,#1565C0 100%);color:white;padding:30px;border-radius:12px;margin-bottom:20px}}
+.header h1{{font-size:24px;margin-bottom:10px}}
+.card{{background:white;padding:20px;border-radius:8px;margin-bottom:12px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}}
+.card:hover{{transform:translateY(-2px);box-shadow:0 4px 8px rgba(0,0,0,0.15)}}
+.rank{{display:inline-block;background:#2196F3;color:white;width:28px;height:28px;border-radius:50%;text-align:center;line-height:28px;font-weight:bold;font-size:13px;margin-right:8px}}
+.account{{color:#2196F3;font-weight:bold}}
+.finance-tag{{background:#FF9800;color:white;padding:2px 6px;border-radius:3px;font-size:11px}}
+.views{{color:#e74c3c;font-weight:bold}}
+.link{{display:inline-block;background:#2196F3;color:white;padding:6px 14px;border-radius:5px;text-decoration:none;font-size:13px}}
+.footer{{text-align:center;padding:15px;color:#999;font-size:12px}}
+</style></head><body>
+<div class="header"><h1>💰 财经大V爆文日报</h1>
+<div style="font-size:14px;opacity:0.9">📅 {yesterday} | 🕐 {today} {fetch_time} | 🎯 只推财经大V</div></div>
 """
+    for i, a in enumerate(articles, 1):
+        account = a.get('account', '未知')
+        is_v = any(kw in account for kw in ALL_WHITELIST_KEYWORDS) if account else False
+        tag = '<span class="finance-tag">💰财经</span>' if is_v else ''
+        html += f"""<div class="card">
+<div style="font-size:17px;font-weight:600;margin-bottom:6px"><span class="rank">{i}</span>{a['title']}</div>
+<div style="font-size:13px;color:#666;margin-bottom:8px">
+<span class="views">📖 {a['views']}</span> | <span class="account">📝 {account}</span> {tag}</div>
+<a class="link" href="{a['url']}" target="_blank">阅读原文 →</a></div>\n"""
     
-    for i, article in enumerate(articles, 1):
-        account = article.get('account', '未知账号')
-        is_big_v = any(v in account or account in v for v in BIG_V_WHITELIST) if account else False
-        category = categorize_article(article['title'])
-        v_tag = '<span class="big-v">💰财经</span>' if is_big_v else ''
-        
-        html += f"""
-<div class="article-card">
-    <div class="title"><span class="rank">{i}</span>{article['title']}</div>
-    <div class="meta">
-        <span class="views">📖 {article['views']}</span> | 
-        <span class="account">📝 {account}</span> {v_tag} | 
-        <span class="category">📂 {category}</span>
-    </div>
-    <a class="link" href="{article['url']}" target="_blank">阅读原文 →</a>
-</div>
-"""
-    
-    html += f"""
-<div class="stats">🎯 大V优先推送 | 📈 {len(articles)} 篇精选 | 所有文章10万+</div>
-<div class="footer">数据来源: 今日热榜 | 每天早上8:00自动推送</div>
-</body></html>"""
-    
+    html += f"""<div class="footer">数据来源: 今日热榜 + 猫笔刀备份站 | 每天早上8:00自动推送</div></body></html>"""
     return html
 
 
 # ============ Server酱推送 ============
 
 def push_to_serverchan(title: str, desp: str, sendkey: str) -> bool:
-    """通过Server酱Turbo版推送消息到微信"""
     if not sendkey:
-        print("[WARN] Server酱SendKey未配置,跳过微信推送")
+        print("[WARN] Server酱SendKey未配置")
         return False
-    
-    url = f"https://sctapi.ftqq.com/{sendkey}.send"
-    data = {'title': title, 'desp': desp}
-    
     try:
-        resp = requests.post(url, data=data, timeout=15)
+        resp = requests.post(f"https://sctapi.ftqq.com/{sendkey}.send", data={'title': title, 'desp': desp}, timeout=15)
         result = resp.json()
         if result.get('code') == 0 or result.get('errno') == 0:
-            print(f"[OK] Server酱推送成功! 标题: {title}")
+            print(f"[OK] Server酱推送成功!")
             return True
         else:
             print(f"[ERROR] Server酱推送失败: {result}")
@@ -462,19 +394,23 @@ def push_to_serverchan(title: str, desp: str, sendkey: str) -> bool:
 # ============ 主流程 ============
 
 def main():
-    """主执行流程"""
     print("=" * 50)
-    print(f"微信财经大V爆文日报 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"💰 财经大V爆文日报 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 50)
     
-    # 1. 抓取数据
-    print("\n[1/5] 抓取微信热文数据...")
-    articles = fetch_wechat_hot_articles()
-    print(f"  抓取到 {len(articles)} 篇10万+文章")
+    # 1. 多数据源抓取
+    print("\n[1/5] 抓取数据...")
+    print("  数据源1: 猫笔刀备份站")
+    maobidao = fetch_maobidao_articles()
     
-    if not articles:
-        print("[WARN] 未抓取到文章,可能数据源暂时不可用")
-        articles = [{
+    print("  数据源2: tophub微信热文")
+    tophub = fetch_tophub_articles()
+    
+    all_articles = maobidao + tophub
+    print(f"  合计: {len(all_articles)} 篇10万+文章")
+    
+    if not all_articles:
+        all_articles = [{
             'title': '暂无数据 - 请稍后重试',
             'url': 'https://tophub.app/n/WnBe01o371',
             'views': '0万', 'views_num': 0,
@@ -484,48 +420,41 @@ def main():
     
     # 2. 识别账号
     print("\n[2/5] 识别账号来源...")
-    articles = identify_accounts(articles)
+    all_articles = identify_accounts(all_articles)
     
-    # 3. 大V过滤
-    print("\n[3/5] 财经大V白名单过滤...")
-    big_v_articles = filter_big_v_articles(articles, BIG_V_WHITELIST)
+    # 3. 财经大V过滤
+    print("\n[3/5] 财经大V过滤...")
+    finance = filter_finance_articles(all_articles)
     
-    # 4. 精选5篇
-    print("\n[4/5] 精选5篇...")
-    top10 = select_top_articles(big_v_articles, count=10)
-    print(f"  精选 {len(top10)} 篇文章:")
+    # 4. 精选10篇
+    print("\n[4/5] 精选10篇...")
+    top10 = select_top_articles(finance, count=10)
+    print(f"  精选 {len(top10)} 篇:")
     for i, a in enumerate(top10, 1):
-        account = a.get('account', '未知')
-        print(f"    {i}. [{a['views']}] [{account}] {a['title'][:40]}")
+        acc = a.get('account', '未知')
+        print(f"    {i}. [{a['views']}] [{acc}] {a['title'][:40]}")
     
     # 5. 推送
-    print("\n[5/5] 推送消息...")
+    print("\n[5/5] 推送...")
     title, desp = format_serverchan_message(top10)
-    push_success = push_to_serverchan(title, desp, SERVERCHAN_SENDKEY)
+    push_ok = push_to_serverchan(title, desp, SERVERCHAN_SENDKEY)
     
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    html = format_html_report(top10)
     with open(HTML_OUTPUT, 'w', encoding='utf-8') as f:
-        f.write(html)
-    print(f"  HTML报告: {HTML_OUTPUT}")
+        f.write(format_html_report(top10))
     
     with open(JSON_OUTPUT, 'w', encoding='utf-8') as f:
         json.dump({
             'fetch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'date': (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d'),
-            'total_10w_articles': len(articles),
-            'big_v_articles': len(big_v_articles),
+            'total_articles': len(all_articles),
+            'finance_articles': len(finance),
             'selected_articles': top10,
         }, f, ensure_ascii=False, indent=2)
     
     print("\n" + "=" * 50)
-    print(f"✅ 执行完成!")
-    print(f"  抓取10万+文章: {len(articles)} 篇")
-    print(f"  财经大V账号文章: {len(big_v_articles)} 篇")
-    print(f"  精选推送: {len(top10)} 篇")
-    print(f"  Server酱推送: {'✅ 成功' if push_success else '❌ 未配置/失败'}")
+    print(f"✅ 完成! 抓取{len(all_articles)}篇 | 财经大V {len(finance)}篇 | 推送{len(top10)}篇 | 推送{'✅' if push_ok else '❌'}")
     print("=" * 50)
-    
     return top10
 
 
