@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-微信公众号大V爆文日报推送服务
+微信公众号财经大V爆文日报推送服务
 ====================================
 每天早上8点抓取前一日阅读量10万+的微信公众号文章,
-识别账号来源,只推送大V账号的文章,过滤普通账号。
+识别账号来源,只推送财经大V账号的文章,过滤普通账号。
 
 数据来源: 今日热榜(tophub) 微信24h热文榜
 推送方式: Server酱 Turbo版 (微信推送)
@@ -33,31 +33,38 @@ OUTPUT_DIR = os.environ.get("OUTPUT_DIR", os.path.join(os.path.dirname(os.path.a
 HTML_OUTPUT = os.path.join(OUTPUT_DIR, "latest.html")
 JSON_OUTPUT = os.path.join(OUTPUT_DIR, "latest.json")
 
-# ★★★ 大V白名单 ★★★
-# 只推送这些账号的文章,普通账号文章会被过滤
-# 你可以随时添加/删除账号名,用逗号分隔
+# ★★★ 财经财经大V白名单 ★★★
+# 只推送这些财经账号的文章,其他全部过滤
+# 你可以随时添加/删除账号名
 BIG_V_WHITELIST = [
-    # === 财经大V ===
-    "猫笔刀", "金渐成", "招财大牛猫",  # 财经投资
-    "半佛仙人",  # 商业深度分析
-    "饭统戴老板",  # 商业故事
-    "远川研究",  # 行业研究
-    # === 科技互联网 ===
-    "量子位", "机器之心",  # AI/科技
-    "极客公园",  # 科技商业
-    "36氪", "虎嗅",  # 商业科技媒体
-    # === 社会新闻大号 ===
-    "人民日报", "新华社", "央视新闻", "中国新闻周刊",
-    "澎湃新闻", "南方周末", "三联生活周刊",
-    "环球时报", "光明日报",
-    # === 深度内容 ===
-    "人物", "GQ报道",  # 人物故事
-    "果壳", "丁香医生",  # 科学健康
-    "地道风物",  # 文化地理
-    # === 生活/职场 ===
-    "晚点LatePost",  # 商业深度
-    "新世相",  # 生活观察
-    "虎扑",  # 体育社区
+    # === 个人财经大V ===
+    "猫笔刀", "金渐成", "招财大牛猫",      # 股市投资
+    "半佛仙人",                              # 商业深度分析
+    "饭统戴老板",                            # 商业故事
+    "刘润",                                  # 商业咨询
+    "吴晓波频道",                            # 财经作家
+    "秦朔朋友圈",                            # 商业评论
+    "正和岛",                                # 企业家社群
+    "格隆汇",                                # 港股美股
+    "雪球",                                  # 投资社区
+    "大猫财经",                              # 财经解读
+    "小白读财经",                            # 财经科普
+    "财经要参",                              # 财经资讯
+    "金融八卦女",                            # 金融圈
+    "市值观察",                              # 上市公司
+    # === 财经媒体 ===
+    "远川研究",                              # 行业研究
+    "36氪", "虎嗅",                          # 商业科技媒体
+    "晚点LatePost",                          # 商业深度
+    "财新网", "第一财经",                    # 专业财经媒体
+    "经济观察报",                            # 财经日报
+    "中国基金报",                            # 基金投资
+    "券商中国",                              # 券商资讯
+    "中国证券报",                            # 证券市场
+    "上海证券报",                            # 证券市场
+    # === 科技商业(与财经交叉) ===
+    "极客公园",                              # 科技商业
+    "量子位",                                # AI投资
 ]
 
 # ============ 数据抓取 ============
@@ -226,7 +233,7 @@ def identify_accounts(articles: List[Dict]) -> List[Dict]:
 
 def filter_big_v_articles(articles: List[Dict], whitelist: List[str]) -> List[Dict]:
     """
-    只保留大V账号的文章
+    只保留财经大V账号的文章
     whitelist中的账号名会做模糊匹配(包含即可)
     """
     big_v_articles = []
@@ -252,7 +259,7 @@ def filter_big_v_articles(articles: List[Dict], whitelist: List[str]) -> List[Di
         else:
             other_articles.append(article)
     
-    print(f"  大V账号文章: {len(big_v_articles)} 篇")
+    print(f"  财经大V账号文章: {len(big_v_articles)} 篇")
     print(f"  其他账号文章: {len(other_articles)} 篇 (已过滤)")
     
     # 如果大V文章不够5篇,从其他文章中补充
@@ -315,14 +322,14 @@ def format_serverchan_message(articles: List[Dict]) -> tuple:
     today = datetime.now().strftime('%Y年%m月%d日')
     fetch_time = datetime.now().strftime('%H:%M')
     
-    title = f"🔥 大V爆文日报 | {yesterday}"
+    title = f"🔥 财经大V爆文日报 | {yesterday}"
     
-    desp = f"""## 微信大V爆文日报
+    desp = f"""## 微信财经大V爆文日报
 
 > 📅 数据日期: {yesterday}  
 > 🕐 推送时间: {today} {fetch_time}  
 > 📊 数据来源: 今日热榜 微信24h热文榜  
-> 🎯 只推送大V账号文章
+> 🎯 只推送财经大V账号文章
 
 ---
 
@@ -331,7 +338,7 @@ def format_serverchan_message(articles: List[Dict]) -> tuple:
     for i, article in enumerate(articles, 1):
         account = article.get('account', '未知账号')
         is_big_v = any(v in account or account in v for v in BIG_V_WHITELIST) if account else False
-        v_tag = "⭐大V" if is_big_v else ""
+        v_tag = "💰财经" if is_big_v else ""
         
         desp += f"""### {i}. {article['title']}
 
@@ -348,7 +355,7 @@ def format_serverchan_message(articles: List[Dict]) -> tuple:
 
 - 本次筛选文章数: **{len(articles)}** 篇
 - 所有文章阅读量均超 **10万+**
-- 优先推送 **大V账号** 文章
+- 优先推送 **财经大V账号** 文章
 
 ---
 
@@ -370,7 +377,7 @@ def format_html_report(articles: List[Dict]) -> str:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>大V爆文日报 | {yesterday}</title>
+<title>财经大V爆文日报 | {yesterday}</title>
 <style>
     * {{ margin: 0; padding: 0; box-sizing: border-box; }}
     body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }}
@@ -394,9 +401,9 @@ def format_html_report(articles: List[Dict]) -> str:
 </head>
 <body>
 <div class="header">
-    <h1>🔥 微信大V爆文日报</h1>
+    <h1>🔥 微信财经大V爆文日报</h1>
     <div class="meta">
-        📅 {yesterday} | 🕐 {today} {fetch_time} | 🎯 只推送大V账号 | 📊 今日热榜
+        📅 {yesterday} | 🕐 {today} {fetch_time} | 🎯 只推送财经大V账号 | 📊 今日热榜
     </div>
 </div>
 """
@@ -405,7 +412,7 @@ def format_html_report(articles: List[Dict]) -> str:
         account = article.get('account', '未知账号')
         is_big_v = any(v in account or account in v for v in BIG_V_WHITELIST) if account else False
         category = categorize_article(article['title'])
-        v_tag = '<span class="big-v">⭐大V</span>' if is_big_v else ''
+        v_tag = '<span class="big-v">💰财经</span>' if is_big_v else ''
         
         html += f"""
 <div class="article-card">
@@ -457,7 +464,7 @@ def push_to_serverchan(title: str, desp: str, sendkey: str) -> bool:
 def main():
     """主执行流程"""
     print("=" * 50)
-    print(f"微信大V爆文日报 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"微信财经大V爆文日报 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 50)
     
     # 1. 抓取数据
@@ -480,24 +487,24 @@ def main():
     articles = identify_accounts(articles)
     
     # 3. 大V过滤
-    print("\n[3/5] 大V白名单过滤...")
+    print("\n[3/5] 财经大V白名单过滤...")
     big_v_articles = filter_big_v_articles(articles, BIG_V_WHITELIST)
     
     # 4. 精选5篇
     print("\n[4/5] 精选5篇...")
-    top5 = select_top_articles(big_v_articles, count=5)
-    print(f"  精选 {len(top5)} 篇文章:")
-    for i, a in enumerate(top5, 1):
+    top10 = select_top_articles(big_v_articles, count=10)
+    print(f"  精选 {len(top10)} 篇文章:")
+    for i, a in enumerate(top10, 1):
         account = a.get('account', '未知')
         print(f"    {i}. [{a['views']}] [{account}] {a['title'][:40]}")
     
     # 5. 推送
     print("\n[5/5] 推送消息...")
-    title, desp = format_serverchan_message(top5)
+    title, desp = format_serverchan_message(top10)
     push_success = push_to_serverchan(title, desp, SERVERCHAN_SENDKEY)
     
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    html = format_html_report(top5)
+    html = format_html_report(top10)
     with open(HTML_OUTPUT, 'w', encoding='utf-8') as f:
         f.write(html)
     print(f"  HTML报告: {HTML_OUTPUT}")
@@ -508,18 +515,18 @@ def main():
             'date': (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d'),
             'total_10w_articles': len(articles),
             'big_v_articles': len(big_v_articles),
-            'selected_articles': top5,
+            'selected_articles': top10,
         }, f, ensure_ascii=False, indent=2)
     
     print("\n" + "=" * 50)
     print(f"✅ 执行完成!")
     print(f"  抓取10万+文章: {len(articles)} 篇")
-    print(f"  大V账号文章: {len(big_v_articles)} 篇")
-    print(f"  精选推送: {len(top5)} 篇")
+    print(f"  财经大V账号文章: {len(big_v_articles)} 篇")
+    print(f"  精选推送: {len(top10)} 篇")
     print(f"  Server酱推送: {'✅ 成功' if push_success else '❌ 未配置/失败'}")
     print("=" * 50)
     
-    return top5
+    return top10
 
 
 if __name__ == "__main__":
